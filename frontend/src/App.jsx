@@ -303,7 +303,7 @@ function Dashboard() {
         <div className="main-grid">
           <section className="surface map-panel">
             <div className="section-heading"><div><h2>Live rider map</h2><p className="muted">Real Mapbox streets · simulated rider coordinates</p></div><span className="map-tag">DEMO MAP</span></div>
-            <MapboxMap riders={riders} />
+            <MapboxMap riders={riders} restaurants={restaurants} />
             <div className="simulation-bar"><div><strong>Simulation controls</strong><small>Move simulated riders across the live map.</small></div><div className="control-buttons"><button className="primary-button compact" onClick={() => setRunning((value) => !value)}>{running ? "Pause" : "Start simulation"}</button><button className="secondary-button compact" onClick={resetSimulation}>Reset</button></div></div>
           </section>
 
