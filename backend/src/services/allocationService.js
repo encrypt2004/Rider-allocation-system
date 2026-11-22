@@ -86,8 +86,8 @@ export const allocateNextOrder = async (ownerId) => {
     let ringsForThisOrder = 0;
 
     for (let ring = 0; ring <= 5; ring += 1) {
-      ringsForThisOrder = ring;
-      lastRingsChecked = Math.max(lastRingsChecked, ring);
+      ringsForThisOrder = ring + 1;
+      lastRingsChecked = Math.max(lastRingsChecked, ring + 1);
       const nearbyCells = new Set(gridDisk(restaurantCell, ring));
       nearby = ridersWithCells.filter((item) => nearbyCells.has(item.cell));
       if (nearby.length > 0) break;
