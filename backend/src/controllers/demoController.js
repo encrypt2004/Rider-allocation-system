@@ -149,3 +149,40 @@ export const allocateDemoOrder = async (req, res) => {
     return res.status(500).json({ message: "Allocation failed", error: error.message });
   }
 };
+
+export const resetDemo = async (req, res) => {
+  try {
+    const ownerId = req.user._id;
+    const riderDefaults = [
+      ["R-01", "IDLE"], ["R-02", "ACCEPTED"], ["R-03", "IDLE"],
+      ["R-04", "ACCEPTED"], ["R-05", "OFFLINE"]
+    ];
+
+    for (const [code, status] of riderDefaults) {
+      await Rider.findOneAndUpdate(
+        { demoOwner: ownerId, code },
+        { $set: { status } }
+      );
+    }
+
+    const riders = await Rider.find({ demoOwner: ownerId });
+    const riderByCode = new Map(riders.map((rider) => [rider.code, rider]));
+    const orderDefaults = [
+      ["1043", "PENDING", null],
+      ["1042", "ASSIGNED", riderByCode.get("R-02")?._id || null],
+      ["1041", "PENDING", null],
+      ["1040", "ASSIGNED", riderByCode.get("R-04")?._id || null]
+    ];
+
+    for (const [orderNumber, status, riderId] of orderDefaults) {
+      await Order.findOneAndUpdate(
+        { demoOwner: ownerId, orderNumber },
+        { $set: { status, rider: riderId } }
+      );
+    }
+
+    return res.json({ message: "Demo data has been reset." });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not reset demo data", error: error.message });
+  }
+};
