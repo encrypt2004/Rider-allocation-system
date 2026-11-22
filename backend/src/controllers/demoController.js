@@ -4,6 +4,7 @@ import Rider from "../models/Rider.js";
 import Restaurant from "../models/Restaurant.js";
 import Customer from "../models/Customer.js";
 import Order from "../models/Order.js";
+import { ensureOrderNumberIntegrity } from "../services/orderNumberService.js";
 import { allocateNextOrder } from "../services/allocationService.js";
 
 const demoRiders = [
@@ -104,6 +105,9 @@ export const setupDemo = async (req, res) => {
           : null
       })));
     }
+
+    // Repair any duplicate numbers created by older versions of the demo.
+    await ensureOrderNumberIntegrity();
 
     return res.json({ message: "Demo data is ready in MongoDB." });
   } catch (error) {
