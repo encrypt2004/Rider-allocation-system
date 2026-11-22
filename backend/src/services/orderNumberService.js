@@ -40,11 +40,20 @@ export const ensureOrderNumberIntegrity = async () => {
     }
 
     if (ownerKey !== "no-owner") {
-      await DemoCounter.findOneAndUpdate(
-        { demoOwner: ownerOrders[0].demoOwner },
-        { $max: { value: maxNumber } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+      try {
+        await DemoCounter.updateOne(
+          { demoOwner: ownerOrders[0].demoOwner },
+          { $max: { value: maxNumber } },
+          { upsert: true }
+        );
+      } catch (error) {
+        // Another setup request may have created this owner's counter first.
+        if (error.code !== 11000) throw error;
+        await DemoCounter.updateOne(
+          { demoOwner: ownerOrders[0].demoOwner },
+          { $max: { value: maxNumber } }
+        );
+      }
     }
   }
 
