@@ -75,6 +75,11 @@ function Dashboard() {
   const [activity, setActivity] = useState(["Connecting to the allocation backend..."]);
   const [allocationDetails, setAllocationDetails] = useState(null);
   const [lifecycleBusy, setLifecycleBusy] = useState("");
+  const [restaurants, setRestaurants] = useState([]);
+  const [resourceBusy, setResourceBusy] = useState("");
+  const [riderForm, setRiderForm] = useState({ name: "", email: "", phone: "", lat: "23.3448", lng: "85.3090", rating: "5" });
+  const [restaurantForm, setRestaurantForm] = useState({ name: "", address: "Ranchi, Jharkhand", lat: "23.3440", lng: "85.3120" });
+  const [orderForm, setOrderForm] = useState({ restaurantId: "", totalAmount: "300" });
 
   useEffect(() => {
     api.get("/auth/me")
@@ -92,9 +97,14 @@ function Dashboard() {
     const loadDemoData = async () => {
       await api.post("/demo/setup");
       const response = await api.get("/demo/dashboard");
+      const resourcesResponse = await api.get("/demo/resources");
       if (!active) return;
       setRiders(response.data.riders);
       setOrders(response.data.orders);
+      setRestaurants(resourcesResponse.data.restaurants || []);
+      if (resourcesResponse.data.restaurants?.length) {
+        setOrderForm((form) => ({ ...form, restaurantId: resourcesResponse.data.restaurants[0]._id }));
+      }
     };
 
     loadDemoData().catch((error) => {
@@ -188,6 +198,67 @@ function Dashboard() {
     }
   };
 
+  const addRider = async (event) => {
+    event.preventDefault();
+    setResourceBusy("rider");
+    try {
+      const response = await api.post("/demo/riders", {
+        ...riderForm,
+        lat: Number(riderForm.lat),
+        lng: Number(riderForm.lng),
+        rating: Number(riderForm.rating)
+      });
+      const dashboard = await api.get("/demo/dashboard");
+      setRiders(dashboard.data.riders);
+      setRiderForm({ name: "", email: "", phone: "", lat: "23.3448", lng: "85.3090", rating: "5" });
+      setActivity((items) => [response.data.message, ...items].slice(0, 5));
+    } catch (error) {
+      setActivity((items) => [error.response?.data?.message || "Could not add rider.", ...items].slice(0, 5));
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
+  const addRestaurant = async (event) => {
+    event.preventDefault();
+    setResourceBusy("restaurant");
+    try {
+      const response = await api.post("/demo/restaurants", {
+        ...restaurantForm,
+        lat: Number(restaurantForm.lat),
+        lng: Number(restaurantForm.lng)
+      });
+      const resourcesResponse = await api.get("/demo/resources");
+      setRestaurants(resourcesResponse.data.restaurants || []);
+      setOrderForm((form) => ({ ...form, restaurantId: response.data.restaurant._id }));
+      setRestaurantForm({ name: "", address: "Ranchi, Jharkhand", lat: "23.3440", lng: "85.3120" });
+      setActivity((items) => [response.data.message, ...items].slice(0, 5));
+    } catch (error) {
+      setActivity((items) => [error.response?.data?.message || "Could not add restaurant.", ...items].slice(0, 5));
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
+  const createOrder = async (event) => {
+    event.preventDefault();
+    setResourceBusy("order");
+    try {
+      const response = await api.post("/demo/orders", {
+        restaurantId: orderForm.restaurantId,
+        totalAmount: Number(orderForm.totalAmount)
+      });
+      const dashboard = await api.get("/demo/dashboard");
+      setOrders(dashboard.data.orders);
+      setRiders(dashboard.data.riders);
+      setActivity((items) => [response.data.message, ...items].slice(0, 5));
+    } catch (error) {
+      setActivity((items) => [error.response?.data?.message || "Could not create order.", ...items].slice(0, 5));
+    } finally {
+      setResourceBusy("");
+    }
+  };
+
   const resetSimulation = async () => {
     setRunning(false);
     setTick(0);
@@ -261,6 +332,47 @@ function Dashboard() {
             <ul className="activity-list">{activity.map((item, index) => <li key={index}><span />{item}</li>)}</ul>
           </section>
         </div>
+
+        <section className="surface management-panel">
+          <div className="section-heading">
+            <div><h2>Manage demo data</h2><p className="muted">Add your own riders, restaurants and waiting orders.</p></div>
+          </div>
+          <div className="management-grid">
+            <form className="management-form" onSubmit={addRider}>
+              <h3>Add rider</h3>
+              <label>Rider name<input required value={riderForm.name} onChange={(e) => setRiderForm({ ...riderForm, name: e.target.value })} placeholder="e.g. Rahul" /></label>
+              <label>Email<input required type="email" value={riderForm.email} onChange={(e) => setRiderForm({ ...riderForm, email: e.target.value })} placeholder="rahul@example.com" /></label>
+              <label>Phone (optional)<input value={riderForm.phone} onChange={(e) => setRiderForm({ ...riderForm, phone: e.target.value })} placeholder="Phone number" /></label>
+              <div className="form-two-columns">
+                <label>Latitude<input required type="number" step="any" value={riderForm.lat} onChange={(e) => setRiderForm({ ...riderForm, lat: e.target.value })} /></label>
+                <label>Longitude<input required type="number" step="any" value={riderForm.lng} onChange={(e) => setRiderForm({ ...riderForm, lng: e.target.value })} /></label>
+              </div>
+              <button className="primary-button compact" disabled={resourceBusy !== ""}>{resourceBusy === "rider" ? "Adding..." : "Add rider"}</button>
+            </form>
+
+            <form className="management-form" onSubmit={addRestaurant}>
+              <h3>Add restaurant</h3>
+              <label>Restaurant name<input required value={restaurantForm.name} onChange={(e) => setRestaurantForm({ ...restaurantForm, name: e.target.value })} placeholder="e.g. Ranchi Kitchen" /></label>
+              <label>Address<input value={restaurantForm.address} onChange={(e) => setRestaurantForm({ ...restaurantForm, address: e.target.value })} placeholder="City / area" /></label>
+              <div className="form-two-columns">
+                <label>Latitude<input required type="number" step="any" value={restaurantForm.lat} onChange={(e) => setRestaurantForm({ ...restaurantForm, lat: e.target.value })} /></label>
+                <label>Longitude<input required type="number" step="any" value={restaurantForm.lng} onChange={(e) => setRestaurantForm({ ...restaurantForm, lng: e.target.value })} /></label>
+              </div>
+              <button className="primary-button compact" disabled={resourceBusy !== ""}>{resourceBusy === "restaurant" ? "Adding..." : "Add restaurant"}</button>
+            </form>
+
+            <form className="management-form" onSubmit={createOrder}>
+              <h3>Create waiting order</h3>
+              <label>Restaurant<select required value={orderForm.restaurantId} onChange={(e) => setOrderForm({ ...orderForm, restaurantId: e.target.value })}>
+                <option value="" disabled>Select a restaurant</option>
+                {restaurants.map((restaurant) => <option key={restaurant._id} value={restaurant._id}>{restaurant.name}</option>)}
+              </select></label>
+              <label>Order amount (₹)<input required type="number" min="0" step="1" value={orderForm.totalAmount} onChange={(e) => setOrderForm({ ...orderForm, totalAmount: e.target.value })} /></label>
+              <p className="form-hint">The new order starts as PENDING and can be allocated using H3 + weighted scoring.</p>
+              <button className="primary-button compact" disabled={resourceBusy !== "" || restaurants.length === 0}>{resourceBusy === "order" ? "Creating..." : "Create order"}</button>
+            </form>
+          </div>
+        </section>
 
         <div className="bottom-grid">
           <section className="surface table-panel"><div className="section-heading"><div><h2>Rider status</h2><p className="muted">Current rider availability</p></div></div><div className="table-wrap"><table><thead><tr><th>Rider</th><th>Status</th><th>Current task</th></tr></thead><tbody>{riders.map((rider) => <tr key={rider.id}><td><strong>{rider.name}</strong><small>{rider.id}</small></td><td><span className={`status-badge ${rider.status.toLowerCase().replaceAll(" ", "-")}`}>{rider.status}</span></td><td>{rider.task}</td></tr>)}</tbody></table></div></section>
