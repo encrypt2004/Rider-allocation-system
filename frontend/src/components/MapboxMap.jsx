@@ -99,7 +99,7 @@ export default function MapboxMap({ riders, restaurants = [] }) {
       let marker = markers.current.get(rider.id);
       if (!marker) {
         const element = document.createElement("div");
-        element.className = "map-rider-marker";
+        element.className = "map-rider-marker " + (["Assigned", "Delivering", "Picked up"].includes(rider.status) ? "busy" : "available");
         element.textContent = rider.name.charAt(0);
         marker = new mapboxgl.Marker({ element })
           .setLngLat([lng, lat])
