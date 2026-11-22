@@ -83,8 +83,10 @@ export const allocateNextOrder = async (ownerId) => {
     const location = restaurant.location;
     const restaurantCell = latLngToCell(location.lat, location.lng, resolution);
     let nearby = [];
+    let ringsForThisOrder = 0;
 
     for (let ring = 0; ring <= 5; ring += 1) {
+      ringsForThisOrder = ring;
       lastRingsChecked = Math.max(lastRingsChecked, ring);
       const nearbyCells = new Set(gridDisk(restaurantCell, ring));
       nearby = ridersWithCells.filter((item) => nearbyCells.has(item.cell));
@@ -94,6 +96,7 @@ export const allocateNextOrder = async (ownerId) => {
     // Skip this order if no rider is close, and try the next pending order.
     if (nearby.length === 0) continue;
 
+    lastRingsChecked = ringsForThisOrder;
     candidates = nearby
       .map(({ rider }) => ({
         ...scoreRider(rider, haversineKm(location, rider.location))
