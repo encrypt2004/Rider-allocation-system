@@ -114,7 +114,25 @@ export const createDemoRestaurant = async (req, res) => {
 };
 
 export const createDemoOrder = async (req, res) => {
+  const idempotencyKey = req.get("Idempotency-Key");
   try {
+    if (!idempotencyKey || idempotencyKey.length > 128) {
+      return res.status(400).json({ message: "A valid Idempotency-Key is required. Please submit the order from the dashboard." });
+    }
+
+    // If the same click/request is sent again, return the original order.
+    const existingOrder = await Order.findOne({
+      demoOwner: req.user._id,
+      idempotencyKey
+    });
+    if (existingOrder) {
+      return res.status(200).json({
+        message: `Order #${existingOrder.orderNumber} was already created.`,
+        orderNumber: existingOrder.orderNumber,
+        duplicate: true
+      });
+    }
+
     const { restaurantId, totalAmount } = req.body;
     if (!restaurantId || !Number.isFinite(Number(totalAmount)) || Number(totalAmount) < 0) {
       return res.status(400).json({ message: "Choose a restaurant and enter a valid non-negative amount." });
@@ -132,6 +150,7 @@ export const createDemoOrder = async (req, res) => {
     const nextNumber = await getNextOrderNumber(req.user._id);
     const order = await Order.create({
       demoOwner: req.user._id,
+      idempotencyKey,
       orderNumber: nextNumber,
       customer: customer._id,
       restaurant: restaurant._id,
@@ -140,6 +159,21 @@ export const createDemoOrder = async (req, res) => {
     });
     return res.status(201).json({ message: `Order #${order.orderNumber} created successfully.`, orderNumber: order.orderNumber });
   } catch (error) {
+    // A second simultaneous request can reach MongoDB before the first
+    // request finishes. The unique key makes the database the final guard.
+    if (error.code === 11000) {
+      const existingOrder = await Order.findOne({
+        demoOwner: req.user._id,
+        idempotencyKey
+      });
+      if (existingOrder) {
+        return res.status(200).json({
+          message: `Order #${existingOrder.orderNumber} was already created.`,
+          orderNumber: existingOrder.orderNumber,
+          duplicate: true
+        });
+      }
+    }
     return res.status(500).json({ message: "Could not create order", error: error.message });
   }
 };
