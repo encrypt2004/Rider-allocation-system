@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
-const RESTAURANT = [85.3120, 23.3440];
 const CUSTOMER = [85.3170, 23.3405];
 
-export default function MapboxMap({ riders }) {
+export default function MapboxMap({ riders, restaurants = [] }) {
   const container = useRef(null);
   const map = useRef(null);
   const markers = useRef(new Map());
+  const restaurantMarkers = useRef(new Map());
   const [message, setMessage] = useState("");
   const [mapLoaded, setMapLoaded] = useState(false);
 
@@ -30,11 +30,6 @@ export default function MapboxMap({ riders }) {
 
     map.current.on("load", () => {
       setMapLoaded(true);
-      const restaurant = document.createElement("div");
-      restaurant.className = "map-place-marker restaurant";
-      restaurant.textContent = "R";
-      new mapboxgl.Marker({ element: restaurant }).setLngLat(RESTAURANT).setPopup(new mapboxgl.Popup({ offset: 18 }).setText("Demo restaurant")).addTo(map.current);
-
       const customer = document.createElement("div");
       customer.className = "map-place-marker customer";
       customer.textContent = "C";
@@ -45,10 +40,43 @@ export default function MapboxMap({ riders }) {
     return () => {
       markers.current.forEach((marker) => marker.remove());
       markers.current.clear();
+      restaurantMarkers.current.forEach((marker) => marker.remove());
+      restaurantMarkers.current.clear();
       map.current?.remove();
       map.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+    const activeIds = new Set();
+    restaurants.forEach((restaurant) => {
+      const lat = Number(restaurant.location?.lat);
+      const lng = Number(restaurant.location?.lng);
+      if (!restaurant._id || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      activeIds.add(restaurant._id);
+      let marker = restaurantMarkers.current.get(restaurant._id);
+      if (!marker) {
+        const element = document.createElement("div");
+        element.className = "map-place-marker restaurant";
+        element.textContent = "R";
+        marker = new mapboxgl.Marker({ element })
+          .setLngLat([lng, lat])
+          .setPopup(new mapboxgl.Popup({ offset: 18 }).setText(restaurant.name))
+          .addTo(map.current);
+        restaurantMarkers.current.set(restaurant._id, marker);
+      } else {
+        marker.setLngLat([lng, lat]);
+        marker.getPopup()?.setText(restaurant.name);
+      }
+    });
+    restaurantMarkers.current.forEach((marker, id) => {
+      if (!activeIds.has(id)) {
+        marker.remove();
+        restaurantMarkers.current.delete(id);
+      }
+    });
+  }, [restaurants, mapLoaded]);
 
   useEffect(() => {
     if (!map.current) return;
