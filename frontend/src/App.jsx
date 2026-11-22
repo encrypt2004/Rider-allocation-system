@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import api from "./api.js";
@@ -112,7 +113,7 @@ function Dashboard() {
   useEffect(() => {
     if (!user) return undefined;
     const token = localStorage.getItem("token");
-    const socketUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\\/api\\/?$/, "");
+    const socketUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
     const socket = io(socketUrl, { auth: { token } });
 
     socket.on("dashboard:update", (dashboard) => {
@@ -255,7 +256,7 @@ function Dashboard() {
                     </tr>
                   ))}
                 </tbody></table></div>
-                <p className="muted">Lower score is better. Score = distance (40%) + ETA (30%) + workload (20%) + rating (10%). Each component is shown above; lower total wins.</p>
+                <p className="muted">Lower score is better. Exact formula: distance = min(km / 5, 1) × 40; ETA = min(minutes / 15, 1) × 30; workload = min(recent deliveries / 10, 1) × 20; rating = ((5 − rating) / 5) × 10. Lower total wins.</p>
               </div>
             )}
             <ul className="activity-list">{activity.map((item, index) => <li key={index}><span />{item}</li>)}</ul>
