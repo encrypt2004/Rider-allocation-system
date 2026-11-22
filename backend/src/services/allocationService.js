@@ -1,7 +1,6 @@
 import { gridDisk, latLngToCell } from "h3-js";
 import Rider from "../models/Rider.js";
 import Order from "../models/Order.js";
-import Restaurant from "../models/Restaurant.js";
 
 // Straight-line distance between two latitude/longitude points, in kilometres.
 export const haversineKm = (from, to) => {
@@ -17,7 +16,7 @@ export const haversineKm = (from, to) => {
   return 2 * earthRadiusKm * Math.asin(Math.sqrt(a));
 };
 
-// Lower scores are better. Every score component is kept visible for explainability.
+// Lower scores are better. Keep each score component visible for explainability.
 const scoreRider = (rider, distanceKm) => {
   const averageSpeedKmh = 25;
   const etaMinutes = (distanceKm / averageSpeedKmh) * 60 + 3;
@@ -45,18 +44,17 @@ const scoreRider = (rider, distanceKm) => {
 };
 
 export const allocateNextOrder = async (ownerId) => {
-  const order = await Order.findOne({ demoOwner: ownerId, status: "PENDING" })
+  // Consider every pending order. Previously, the oldest order was selected
+  // first; if it had no nearby rider, allocation stopped without checking
+  // newer orders that might have a rider right beside their restaurant.
+  const pendingOrders = await Order.find({ demoOwner: ownerId, status: "PENDING" })
     .sort({ createdAt: 1 })
     .populate("restaurant");
 
-  if (!order) {
+  if (pendingOrders.length === 0) {
     return { error: "There are no waiting orders to allocate." };
   }
-  if (!order.restaurant || !order.restaurant.isOpen) {
-    return { error: "The restaurant for this order is unavailable." };
-  }
 
-  const restaurantLocation = order.restaurant.location;
   const availableRiders = await Rider.find({
     demoOwner: ownerId,
     status: "IDLE"
@@ -66,49 +64,63 @@ export const allocateNextOrder = async (ownerId) => {
     return { error: "There are no available riders." };
   }
 
-  // H3 resolution 9 gives neighbourhood-sized cells. Expand rings from
-  // the restaurant cell up to five rings; report a clear edge case if empty.
   const resolution = 9;
-  const restaurantCell = latLngToCell(
-    restaurantLocation.lat,
-    restaurantLocation.lng,
-    resolution
-  );
   const ridersWithCells = availableRiders.map((rider) => ({
     rider,
     cell: latLngToCell(rider.location.lat, rider.location.lng, resolution)
   }));
 
-  let nearby = [];
-  let ringsChecked = 0;
-  for (let ring = 0; ring <= 5; ring += 1) {
-    ringsChecked = ring;
-    const nearbyCells = new Set(gridDisk(restaurantCell, ring));
-    nearby = ridersWithCells.filter((item) => nearbyCells.has(item.cell));
-    if (nearby.length > 0) break;
+  let selectedOrder = null;
+  let candidates = [];
+  let lastRingsChecked = 0;
+  let validRestaurantCount = 0;
+
+  for (const order of pendingOrders) {
+    const restaurant = order.restaurant;
+    if (!restaurant || !restaurant.isOpen) continue;
+    validRestaurantCount += 1;
+
+    const location = restaurant.location;
+    const restaurantCell = latLngToCell(location.lat, location.lng, resolution);
+    let nearby = [];
+
+    for (let ring = 0; ring <= 5; ring += 1) {
+      lastRingsChecked = Math.max(lastRingsChecked, ring);
+      const nearbyCells = new Set(gridDisk(restaurantCell, ring));
+      nearby = ridersWithCells.filter((item) => nearbyCells.has(item.cell));
+      if (nearby.length > 0) break;
+    }
+
+    // Skip this order if no rider is close, and try the next pending order.
+    if (nearby.length === 0) continue;
+
+    candidates = nearby
+      .map(({ rider }) => ({
+        ...scoreRider(rider, haversineKm(location, rider.location))
+      }))
+      .sort((a, b) => a.score - b.score);
+    selectedOrder = order;
+    break;
   }
 
-  if (nearby.length === 0) {
+  if (!selectedOrder) {
     return {
-      error: "No available riders were found within 5 H3 rings of this restaurant. Try again after a rider moves closer.",
+      error: validRestaurantCount === 0
+        ? "None of the waiting orders has an open restaurant."
+        : "No available riders were found within 5 H3 rings of any waiting order's restaurant. Check rider and restaurant coordinates.",
       reason: "NO_NEARBY_RIDERS",
-      h3: { resolution, ringsChecked, candidateCount: 0 }
+      h3: { resolution, ringsChecked: lastRingsChecked, candidateCount: 0 },
+      pendingOrdersChecked: pendingOrders.length
     };
   }
-
-  const candidates = nearby
-    .map(({ rider }) => {
-      const distanceKm = haversineKm(restaurantLocation, rider.location);
-      return scoreRider(rider, distanceKm);
-    })
-    .sort((a, b) => a.score - b.score);
 
   const winner = candidates[0];
   const assignedRider = availableRiders.find(
     (rider) => rider._id.toString() === winner.riderId.toString()
   );
 
-  // Conditional update prevents two requests from assigning the same rider/order.
+  // Conditional updates prevent two concurrent requests from taking the
+  // same rider or order.
   const riderUpdate = await Rider.findOneAndUpdate(
     { _id: assignedRider._id, demoOwner: ownerId, status: "IDLE" },
     { $set: { status: "ACCEPTED" } },
@@ -120,7 +132,7 @@ export const allocateNextOrder = async (ownerId) => {
   }
 
   const orderUpdate = await Order.findOneAndUpdate(
-    { _id: order._id, demoOwner: ownerId, status: "PENDING" },
+    { _id: selectedOrder._id, demoOwner: ownerId, status: "PENDING" },
     { $set: { rider: assignedRider._id, status: "ASSIGNED" } },
     { new: true }
   );
@@ -134,12 +146,12 @@ export const allocateNextOrder = async (ownerId) => {
   }
 
   return {
-    orderId: order._id,
-    orderNumber: order.orderNumber,
-    restaurant: order.restaurant.name,
+    orderId: selectedOrder._id,
+    orderNumber: selectedOrder.orderNumber,
+    restaurant: selectedOrder.restaurant.name,
     selectedRider: winner,
     candidates,
-    h3: { resolution, ringsChecked, candidateCount: candidates.length },
+    h3: { resolution, ringsChecked: lastRingsChecked, candidateCount: candidates.length },
     scoreWeights: { distance: 40, eta: 30, workload: 20, rating: 10 },
     orderStatus: orderUpdate.status
   };
