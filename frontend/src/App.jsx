@@ -152,12 +152,22 @@ function Dashboard() {
     }
   };
 
-  const resetSimulation = () => {
+  const resetSimulation = async () => {
     setRunning(false);
     setTick(0);
-    setRiders(initialRiders);
-    setOrders(initialOrders);
-    setActivity(["Simulation reset. Ready for a new run."]);
+    try {
+      await api.post("/demo/reset");
+      const dashboard = await api.get("/demo/dashboard");
+      setRiders(dashboard.data.riders);
+      setOrders(dashboard.data.orders);
+      setAllocationDetails(null);
+      setActivity(["Simulation and MongoDB demo data reset. Ready for a new run."]);
+    } catch (error) {
+      setActivity((items) => [
+        error.response?.data?.message || "Could not reset demo data.",
+        ...items
+      ].slice(0, 5));
+    }
   };
 
   if (authError) return <main className="auth-page"><section className="auth-card"><p>{authError}</p><Link to="/login">Log in</Link></section></main>;
