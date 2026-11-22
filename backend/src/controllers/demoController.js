@@ -119,16 +119,22 @@ const buildDashboard = async (ownerId, userName) => {
     .sort({ createdAt: -1 });
 
   return {
-    riders: riders.map((rider) => ({
-      id: rider.code,
-      name: rider.user?.name || "Rider",
-      lat: rider.location.lat,
-      lng: rider.location.lng,
-      status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : rider.status === "PICKED_UP" ? "Picked up" : "Delivering",
-      task: rider.status === "IDLE" ? "Waiting for order" : rider.status === "OFFLINE" ? "Not on shift" : "Assigned delivery",
-      rating: rider.rating,
-      recentDeliveries: rider.recentDeliveries
-    })),
+    riders: riders.map((rider) => {
+      const activeOrder = orders.find((order) =>
+        order.rider && order.rider._id.toString() === rider._id.toString() &&
+        ["ASSIGNED", "PICKED_UP"].includes(order.status)
+      );
+      return {
+        id: rider.code,
+        name: rider.user?.name || "Rider",
+        lat: rider.location.lat,
+        lng: rider.location.lng,
+        status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : rider.status === "PICKED_UP" ? "Picked up" : "Delivering",
+        task: activeOrder ? `Order #${activeOrder.orderNumber}` : rider.status === "IDLE" ? "Waiting for order" : rider.status === "OFFLINE" ? "Not on shift" : "Assigned delivery",
+        rating: rider.rating,
+        recentDeliveries: rider.recentDeliveries
+      };
+    }),
     orders: orders.map((order) => ({
       id: `#${order.orderNumber}`,
       orderNumber: order.orderNumber,
@@ -214,14 +220,35 @@ export const moveDemoRiders = async (req, res) => {
   try {
     const ownerId = req.user._id;
     const riders = await Rider.find({ demoOwner: ownerId, status: { $ne: "OFFLINE" } });
+    const activeOrders = await Order.find({
+      demoOwner: ownerId,
+      status: { $in: ["ASSIGNED", "PICKED_UP"] }
+    }).populate("restaurant").populate("customer");
+    const orderByRider = new Map(
+      activeOrders.filter((order) => order.rider).map((order) => [order.rider.toString(), order])
+    );
     const now = Date.now();
 
     for (const [index, rider] of riders.entries()) {
-      const home = demoRiders.find((item) => item.code === rider.code);
-      if (!home) continue;
-      const angle = now / 1100 + index * 1.7;
-      rider.location.lat = home.lat + Math.sin(angle) * 0.0005;
-      rider.location.lng = home.lng + Math.cos(angle * 0.8) * 0.0005;
+      const activeOrder = orderByRider.get(rider._id.toString());
+      const target = activeOrder
+        ? activeOrder.status === "PICKED_UP"
+          ? activeOrder.customer?.location
+          : activeOrder.restaurant?.location
+        : null;
+
+      if (target && Number.isFinite(target.lat) && Number.isFinite(target.lng)) {
+        // Move a small fraction toward the restaurant or customer on each tick.
+        rider.location.lat += (target.lat - rider.location.lat) * 0.08;
+        rider.location.lng += (target.lng - rider.location.lng) * 0.08;
+      } else {
+        const home = demoRiders.find((item) => item.code === rider.code);
+        if (!home) continue;
+        const angle = now / 1100 + index * 1.7;
+        rider.location.lat = home.lat + Math.sin(angle) * 0.0005;
+        rider.location.lng = home.lng + Math.cos(angle * 0.8) * 0.0005;
+      }
+
       await rider.save();
     }
 
