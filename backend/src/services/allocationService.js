@@ -110,7 +110,7 @@ export const allocateNextOrder = async (ownerId) => {
 
   // Conditional update prevents two requests from assigning the same rider/order.
   const riderUpdate = await Rider.findOneAndUpdate(
-    { _id: assignedRider._id, status: "IDLE" },
+    { _id: assignedRider._id, demoOwner: ownerId, status: "IDLE" },
     { $set: { status: "ACCEPTED" } },
     { new: true }
   );
@@ -120,13 +120,16 @@ export const allocateNextOrder = async (ownerId) => {
   }
 
   const orderUpdate = await Order.findOneAndUpdate(
-    { _id: order._id, status: "PENDING" },
+    { _id: order._id, demoOwner: ownerId, status: "PENDING" },
     { $set: { rider: assignedRider._id, status: "ASSIGNED" } },
     { new: true }
   );
 
   if (!orderUpdate) {
-    await Rider.findByIdAndUpdate(assignedRider._id, { $set: { status: "IDLE" } });
+    await Rider.findOneAndUpdate(
+      { _id: assignedRider._id, demoOwner: ownerId, status: "ACCEPTED" },
+      { $set: { status: "IDLE" } }
+    );
     return { error: "That order was just assigned. Please try again." };
   }
 
