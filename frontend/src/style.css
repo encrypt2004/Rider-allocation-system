@@ -122,3 +122,16 @@ td strong,td small{display:block}td strong{font-size:11px;color:#27344b}td small
 .candidate-results .table-wrap small {
   line-height: 1.5;
 }
+
+/* Simple forms for adding real MongoDB-backed demo resources. */
+.management-panel{margin-bottom:17px}
+.management-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.management-form{display:grid;gap:10px;padding:15px;border:1px solid #e9edf4;border-radius:12px;background:#fbfcfe;align-content:start}
+.management-form h3{font:700 13px Manrope,sans-serif;margin:0 0 3px;color:#243149}
+.management-form label{display:grid;gap:5px;font-size:11px;font-weight:600;color:#58657a}
+.management-form input,.management-form select{width:100%;min-width:0;border:1px solid #dce2ec;border-radius:8px;padding:9px 10px;background:#fff;color:#27344b;outline:none;font:inherit}
+.management-form input:focus,.management-form select:focus{border-color:#6384f1;box-shadow:0 0 0 3px #eaf0ff}
+.form-two-columns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form-hint{font-size:10px;color:#748096;line-height:1.5;margin:0}
+@media(max-width:900px){.management-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:650px){.management-grid{grid-template-columns:1fr}}
