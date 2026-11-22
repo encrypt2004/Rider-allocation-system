@@ -71,7 +71,8 @@ function Dashboard() {
   const [tick, setTick] = useState(0);
   const [riders, setRiders] = useState(initialRiders);
   const [orders, setOrders] = useState(initialOrders);
-  const [activity, setActivity] = useState(["Simulation ready. Start the demo to move riders."]);
+  const [activity, setActivity] = useState(["Connecting to the allocation backend..."]);
+  const [allocationDetails, setAllocationDetails] = useState(null);
 
   useEffect(() => {
     api.get("/auth/me")
@@ -81,6 +82,30 @@ function Dashboard() {
         setAuthError("Your session has expired. Please log in again.");
       });
   }, []);
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true;
+
+    const loadDemoData = async () => {
+      await api.post("/demo/setup");
+      const response = await api.get("/demo/dashboard");
+      if (!active) return;
+      setRiders(response.data.riders);
+      setOrders(response.data.orders);
+    };
+
+    loadDemoData().catch((error) => {
+      if (active) {
+        setActivity((items) => [
+          error.response?.data?.message || "Could not load demo data from the backend.",
+          ...items
+        ].slice(0, 5));
+      }
+    });
+
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     if (!running) return undefined;
@@ -107,16 +132,24 @@ function Dashboard() {
     navigate("/login");
   };
 
-  const allocateOrder = () => {
-    const order = orders.find((item) => item.status === "Waiting");
-    const rider = riders.find((item) => item.status === "Available");
-    if (!order || !rider) {
-      setActivity((items) => ["No waiting order or available rider to allocate.", ...items].slice(0, 5));
-      return;
+  const allocateOrder = async () => {
+    try {
+      const response = await api.post("/demo/allocate");
+      const allocation = response.data.allocation;
+      const dashboard = await api.get("/demo/dashboard");
+      setRiders(dashboard.data.riders);
+      setOrders(dashboard.data.orders);
+      setAllocationDetails(allocation);
+      setActivity((items) => [
+        `${allocation.selectedRider.riderName} assigned to #${allocation.orderNumber} · ${allocation.selectedRider.distanceKm} km · ETA ${allocation.selectedRider.etaMinutes} min.`,
+        ...items
+      ].slice(0, 5));
+    } catch (error) {
+      setActivity((items) => [
+        error.response?.data?.message || "Could not allocate the next order.",
+        ...items
+      ].slice(0, 5));
     }
-    setOrders((items) => items.map((item) => item.id === order.id ? { ...item, status: "Assigned", rider: rider.name } : item));
-    setRiders((items) => items.map((item) => item.id === rider.id ? { ...item, status: "Delivering", task: `Order ${order.id}` } : item));
-    setActivity((items) => [`${rider.name} assigned to ${order.id} — nearest available rider in this demo.`, ...items].slice(0, 5));
   };
 
   const resetSimulation = () => {
@@ -159,9 +192,26 @@ function Dashboard() {
 
           <section className="surface allocation-panel">
             <div className="section-heading"><div><h2>Allocation</h2><p className="muted">Assign the next waiting order.</p></div></div>
-            <div className="allocation-callout"><span className="callout-icon">↗</span><div><strong>Simple nearest-rider demo</strong><p>The demo selects the first available rider. Distance-based scoring will be connected in the next allocation phase.</p></div></div>
+            <div className="allocation-callout"><span className="callout-icon">↗</span><div><strong>H3 + weighted rider scoring</strong><p>The backend searches nearby H3 cells, calculates Haversine distance and estimated arrival time, then ranks available riders.</p></div></div>
             <button className="primary-button full-button" onClick={allocateOrder}>Allocate next order</button>
             <div className="activity-heading">Recent activity</div>
+            {allocationDetails && (
+              <div className="candidate-results">
+                <div className="activity-heading">Allocation decision · Order #{allocationDetails.orderNumber}</div>
+                <p className="muted">H3 resolution {allocationDetails.h3.resolution} · rings searched {allocationDetails.h3.ringsChecked} · candidates {allocationDetails.h3.candidateCount}</p>
+                <div className="table-wrap"><table><thead><tr><th>Rider</th><th>Distance</th><th>ETA</th><th>Score</th></tr></thead><tbody>
+                  {allocationDetails.candidates.map((candidate) => (
+                    <tr key={candidate.riderId}>
+                      <td><strong>{candidate.riderName}</strong>{candidate.riderId === allocationDetails.selectedRider.riderId && <small>Selected</small>}</td>
+                      <td>{candidate.distanceKm} km</td>
+                      <td>{candidate.etaMinutes} min</td>
+                      <td>{candidate.score}</td>
+                    </tr>
+                  ))}
+                </tbody></table></div>
+                <p className="muted">Lower score is better. Score weights: distance 40%, ETA 30%, workload 20%, rating 10%.</p>
+              </div>
+            )}
             <ul className="activity-list">{activity.map((item, index) => <li key={index}><span />{item}</li>)}</ul>
           </section>
         </div>
