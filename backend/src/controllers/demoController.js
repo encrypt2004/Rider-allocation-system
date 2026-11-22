@@ -93,11 +93,15 @@ export const setupDemo = async (req, res) => {
         { orderNumber: "1041", restaurant: restaurants[2]._id, status: "PENDING", totalAmount: 350 },
         { orderNumber: "1040", restaurant: restaurants[0]._id, status: "ASSIGNED", totalAmount: 510 }
       ];
+      const ishita = await Rider.findOne({ demoOwner: ownerId, code: "R-02" });
+      const meera = await Rider.findOne({ demoOwner: ownerId, code: "R-04" });
       await Order.insertMany(orders.map((order) => ({
         ...order,
         customer: customer._id,
         demoOwner: ownerId,
-        rider: null
+        rider: order.orderNumber === "1042" ? ishita._id
+          : order.orderNumber === "1040" ? meera._id
+          : null
       })));
     }
 
