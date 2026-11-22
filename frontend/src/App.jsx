@@ -111,13 +111,22 @@ function Dashboard() {
     if (!running) return undefined;
     const timer = window.setInterval(() => {
       setTick((value) => value + 1);
-      setRiders((current) => current.map((rider) => {
+      setRiders((current) => current.map((rider, index) => {
         if (rider.status === "Offline") return rider;
-        const angle = (Date.now() / 1100 + rider.step * 1.7);
+
+        // Backend riders do not need a "step" field; use their list position.
+        const step = Number.isFinite(rider.step) ? rider.step : index;
+        const angle = Date.now() / 1100 + step * 1.7;
+        const lat = Number(rider.lat);
+        const lng = Number(rider.lng);
+
+        // Never pass invalid coordinates to Mapbox.
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return rider;
+
         return {
           ...rider,
-          lat: rider.lat + Math.sin(angle) * 0.00012,
-          lng: rider.lng + Math.cos(angle * 0.8) * 0.00012
+          lat: lat + Math.sin(angle) * 0.00012,
+          lng: lng + Math.cos(angle * 0.8) * 0.00012
         };
       }));
     }, 1100);
