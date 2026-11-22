@@ -74,6 +74,8 @@ function Dashboard() {
   const [orders, setOrders] = useState(initialOrders);
   const [activity, setActivity] = useState(["Connecting to the allocation backend..."]);
   const [allocationDetails, setAllocationDetails] = useState(null);
+  const [allocationBusy, setAllocationBusy] = useState(false);
+  const allocationLock = useRef(false);
   const [lifecycleBusy, setLifecycleBusy] = useState("");
   const [restaurants, setRestaurants] = useState([]);
   const [resourceBusy, setResourceBusy] = useState("");
@@ -183,6 +185,11 @@ function Dashboard() {
   };
 
   const allocateOrder = async () => {
+    // Lock synchronously so two rapid clicks cannot send two allocation requests.
+    if (allocationLock.current) return;
+    allocationLock.current = true;
+    setAllocationBusy(true);
+
     try {
       const response = await api.post("/demo/allocate");
       const allocation = response.data.allocation;
@@ -199,6 +206,9 @@ function Dashboard() {
         error.response?.data?.message || "Could not allocate the next order.",
         ...items
       ].slice(0, 5));
+    } finally {
+      allocationLock.current = false;
+      setAllocationBusy(false);
     }
   };
 
@@ -340,7 +350,7 @@ function Dashboard() {
           <section className="surface allocation-panel">
             <div className="section-heading"><div><h2>Allocation</h2><p className="muted">Assign the next waiting order.</p></div></div>
             <div className="allocation-callout"><span className="callout-icon">↗</span><div><strong>H3 + weighted rider scoring</strong><p>The backend searches nearby H3 cells, calculates Haversine distance and estimated arrival time, then ranks available riders.</p></div></div>
-            <button className="primary-button full-button" onClick={allocateOrder}>Allocate next order</button>
+            <button className="primary-button full-button" onClick={allocateOrder} disabled={allocationBusy}>{allocationBusy ? "Allocating..." : "Allocate next order"}</button>
             <div className="activity-heading">Recent activity</div>
             {allocationDetails && (
               <div className="candidate-results">
