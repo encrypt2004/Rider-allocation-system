@@ -123,7 +123,20 @@ function Dashboard() {
     if (!user) return undefined;
     const token = localStorage.getItem("token");
     const socketUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
-    const socket = io(socketUrl, { auth: { token } });
+    // Use WebSocket directly. This avoids failing XHR long-polling
+    // handshakes in some local Windows/browser setups.
+    const socket = io(socketUrl, {
+      auth: { token },
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      timeout: 10000
+    });
+
+    socket.on("connect", () => {
+      setActivity((items) => ["Live updates connected.", ...items].slice(0, 5));
+    });
 
     socket.on("dashboard:update", (dashboard) => {
       setRiders(dashboard.riders || []);
@@ -131,7 +144,13 @@ function Dashboard() {
     });
 
     socket.on("connect_error", (error) => {
-      setActivity((items) => [`Live updates disconnected: ${error.message}`, ...items].slice(0, 5));
+      setActivity((items) => [`Live updates connection error: ${error.message}`, ...items].slice(0, 5));
+    });
+
+    socket.on("disconnect", (reason) => {
+      if (reason !== "io client disconnect") {
+        setActivity((items) => [`Live updates disconnected: ${reason}`, ...items].slice(0, 5));
+      }
     });
 
     return () => socket.disconnect();
