@@ -53,6 +53,16 @@ export default function MapboxMap({ riders }) {
   useEffect(() => {
     if (!map.current) return;
     riders.forEach((rider) => {
+      const lat = Number(rider.lat);
+      const lng = Number(rider.lng);
+
+      // Ignore missing or invalid coordinates so one bad rider cannot crash the map.
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        markers.current.get(rider.id)?.remove();
+        markers.current.delete(rider.id);
+        return;
+      }
+
       if (rider.status === "Offline") {
         markers.current.get(rider.id)?.remove();
         markers.current.delete(rider.id);
@@ -64,12 +74,12 @@ export default function MapboxMap({ riders }) {
         element.className = "map-rider-marker";
         element.textContent = rider.name.charAt(0);
         marker = new mapboxgl.Marker({ element })
-          .setLngLat([rider.lng, rider.lat])
+          .setLngLat([lng, lat])
           .setPopup(new mapboxgl.Popup({ offset: 16 }).setText(rider.name + " · " + rider.status))
           .addTo(map.current);
         markers.current.set(rider.id, marker);
       } else {
-        marker.setLngLat([rider.lng, rider.lat]);
+        marker.setLngLat([lng, lat]);
         marker.getElement().className = "map-rider-marker " + (rider.status === "Delivering" ? "busy" : "available");
       }
     });
