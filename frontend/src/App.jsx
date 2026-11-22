@@ -174,7 +174,7 @@ function Dashboard() {
   }, [running]);
 
   const availableCount = riders.filter((r) => r.status === "Available").length;
-  const activeCount = riders.filter((r) => ["Delivering", "Picked up"].includes(r.status)).length;
+  const activeCount = riders.filter((r) => ["Assigned", "Delivering", "Picked up"].includes(r.status)).length;
   const waitingCount = orders.filter((o) => o.status === "PENDING").length;
   const logout = () => {
     localStorage.removeItem("token");
@@ -314,7 +314,7 @@ function Dashboard() {
 
         <div className="stats-grid">
           <article className="stat-card"><span>Available riders</span><strong>{availableCount}</strong><small>Ready for allocation</small></article>
-          <article className="stat-card"><span>Delivering</span><strong>{activeCount}</strong><small>Currently on an order</small></article>
+          <article className="stat-card"><span>Active deliveries</span><strong>{activeCount}</strong><small>Assigned or picked up</small></article>
           <article className="stat-card"><span>Waiting orders</span><strong>{waitingCount}</strong><small>Need a rider</small></article>
           <article className="stat-card"><span>Simulation ticks</span><strong>{tick}</strong><small>Movement updates</small></article>
         </div>
