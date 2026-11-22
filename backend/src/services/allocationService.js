@@ -66,8 +66,8 @@ export const allocateNextOrder = async (ownerId) => {
     return { error: "There are no available riders." };
   }
 
-  // H3 resolution 9 gives neighbourhood-sized cells. Expand rings until
-  // we find candidates; if none are in the first five rings, use all idle riders.
+  // H3 resolution 9 gives neighbourhood-sized cells. Expand rings from
+  // the restaurant cell up to five rings; report a clear edge case if empty.
   const resolution = 9;
   const restaurantCell = latLngToCell(
     restaurantLocation.lat,
