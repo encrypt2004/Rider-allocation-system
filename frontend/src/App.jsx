@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import api from "./api.js";
@@ -77,6 +77,7 @@ function Dashboard() {
   const [lifecycleBusy, setLifecycleBusy] = useState("");
   const [restaurants, setRestaurants] = useState([]);
   const [resourceBusy, setResourceBusy] = useState("");
+  const orderSubmitLock = useRef(false);
   const [riderForm, setRiderForm] = useState({ name: "", email: "", phone: "", lat: "23.3448", lng: "85.3090", rating: "5" });
   const [restaurantForm, setRestaurantForm] = useState({ name: "", address: "Ranchi, Jharkhand", lat: "23.3440", lng: "85.3120" });
   const [orderForm, setOrderForm] = useState({ restaurantId: "", totalAmount: "300" });
@@ -261,11 +262,20 @@ function Dashboard() {
 
   const createOrder = async (event) => {
     event.preventDefault();
+
+    // A ref changes immediately, so a rapid double-click cannot start
+    // a second request before React has re-rendered the disabled button.
+    if (orderSubmitLock.current) return;
+    orderSubmitLock.current = true;
     setResourceBusy("order");
+
     try {
+      const idempotencyKey = crypto.randomUUID();
       const response = await api.post("/demo/orders", {
         restaurantId: orderForm.restaurantId,
         totalAmount: Number(orderForm.totalAmount)
+      }, {
+        headers: { "Idempotency-Key": idempotencyKey }
       });
       const dashboard = await api.get("/demo/dashboard");
       setOrders(dashboard.data.orders);
@@ -274,6 +284,7 @@ function Dashboard() {
     } catch (error) {
       setActivity((items) => [error.response?.data?.message || "Could not create order.", ...items].slice(0, 5));
     } finally {
+      orderSubmitLock.current = false;
       setResourceBusy("");
     }
   };
