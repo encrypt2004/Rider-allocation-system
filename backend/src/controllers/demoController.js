@@ -133,7 +133,7 @@ const buildDashboard = async (ownerId, userName) => {
         name: rider.user?.name || "Rider",
         lat: rider.location.lat,
         lng: rider.location.lng,
-        status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : rider.status === "PICKED_UP" ? "Picked up" : "Delivering",
+        status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : rider.status === "PICKED_UP" ? "Picked up" : rider.status === "ACCEPTED" ? "Assigned" : "Available",
         task: activeOrder ? `Order #${activeOrder.orderNumber}` : rider.status === "IDLE" ? "Waiting for order" : rider.status === "OFFLINE" ? "Not on shift" : "Assigned delivery",
         rating: rider.rating,
         recentDeliveries: rider.recentDeliveries
