@@ -100,3 +100,13 @@ td strong,td small{display:block}td strong{font-size:11px;color:#27344b}td small
 .loading-page{color:#748096}
 @media(max-width:900px){.main-grid{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.content{padding:22px 14px}.topbar{padding:0 14px}.user-chip{display:none}.page-heading{align-items:flex-start;flex-direction:column}.page-heading h1{font-size:22px}.bottom-grid{grid-template-columns:1fr}.surface{padding:15px}.map-canvas{height:280px}.simulation-bar{align-items:flex-start;flex-direction:column}.control-buttons{width:100%}.control-buttons button{flex:1}.auth-card{padding:27px 22px}}
+
+/* Real Mapbox map */
+.mapbox-wrapper{height:330px;position:relative;overflow:hidden;border-radius:12px;border:1px solid #e1e8dc;background:#eaf0e8}
+.mapbox-canvas{position:absolute;inset:0;width:100%;height:100%}
+.mapbox-legend{z-index:2;box-shadow:0 2px 8px #17203318}
+.map-rider-marker,.map-place-marker{width:30px;height:30px;border:3px solid #fff;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:800;box-shadow:0 2px 9px #17203355;cursor:pointer}
+.map-rider-marker.available{background:#16a36a}.map-rider-marker.busy{background:#3474df}
+.map-place-marker.restaurant{background:#ed8b35}.map-place-marker.customer{background:#8b5cf6}
+.mapbox-message{position:absolute;z-index:4;top:12px;left:12px;right:52px;background:#fff;border:1px solid #f2c6a5;color:#9a4b12;padding:10px 12px;border-radius:8px;font-size:12px;box-shadow:0 2px 10px #17203318}
+@media(max-width:650px){.mapbox-wrapper{height:280px}}
