@@ -5,6 +5,7 @@ import Rider from "../models/Rider.js";
 import Restaurant from "../models/Restaurant.js";
 import Customer from "../models/Customer.js";
 import Order from "../models/Order.js";
+import { getNextOrderNumber } from "../services/orderNumberService.js";
 
 const validCoordinate = (value, min, max) =>
   Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max;
@@ -128,11 +129,10 @@ export const createDemoOrder = async (req, res) => {
     const customer = await Customer.findOne({ user: req.user._id });
     if (!customer) return res.status(400).json({ message: "Customer profile is missing. Reload the dashboard to prepare demo data." });
 
-    const latest = await Order.find({ demoOwner: req.user._id }).sort({ createdAt: -1 }).select("orderNumber").limit(1);
-    const nextNumber = latest.length ? Number(latest[0].orderNumber) + 1 : 1043;
+    const nextNumber = await getNextOrderNumber(req.user._id);
     const order = await Order.create({
       demoOwner: req.user._id,
-      orderNumber: String(nextNumber),
+      orderNumber: nextNumber,
       customer: customer._id,
       restaurant: restaurant._id,
       totalAmount: Number(totalAmount),
