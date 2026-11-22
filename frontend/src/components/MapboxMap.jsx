@@ -10,6 +10,7 @@ export default function MapboxMap({ riders }) {
   const map = useRef(null);
   const markers = useRef(new Map());
   const [message, setMessage] = useState("");
+  const [mapLoaded, setMapLoaded] = useState(false);
 
   useEffect(() => {
     const token = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -28,6 +29,7 @@ export default function MapboxMap({ riders }) {
     map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
 
     map.current.on("load", () => {
+      setMapLoaded(true);
       const restaurant = document.createElement("div");
       restaurant.className = "map-place-marker restaurant";
       restaurant.textContent = "R";
@@ -71,7 +73,7 @@ export default function MapboxMap({ riders }) {
         marker.getElement().className = "map-rider-marker " + (rider.status === "Delivering" ? "busy" : "available");
       }
     });
-  }, [riders]);
+  }, [riders, mapLoaded]);
 
   return (
     <div className="mapbox-wrapper">
