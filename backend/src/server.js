@@ -11,11 +11,18 @@ const PORT = process.env.PORT || 5000;
 const httpServer = http.createServer(app);
 
 // Socket.IO sends live updates only to the logged-in user's room.
+const allowedOrigins = [
+  process.env.CLIENT_URL || "http://localhost:5173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173"
+];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: allowedOrigins,
     methods: ["GET", "POST", "PATCH"]
-  }
+  },
+  transports: ["websocket", "polling"]
 });
 
 io.use((socket, next) => {
@@ -32,6 +39,11 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   socket.join(`user:${socket.userId}`);
+  console.log(`Socket connected for user ${socket.userId}`);
+});
+
+io.engine.on("connection_error", (error) => {
+  console.error("Socket.IO connection error:", error.message);
 });
 
 app.set("io", io);
