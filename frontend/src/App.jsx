@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import api from "./api.js";
+import MapboxMap from "./components/MapboxMap.jsx";
 
 function AuthPage({ mode }) {
   const navigate = useNavigate();
@@ -48,11 +49,11 @@ function AuthPage({ mode }) {
 }
 
 const initialRiders = [
-  { id: "R-01", name: "Aarav", x: 18, y: 26, status: "Available", task: "Waiting for order", step: 0 },
-  { id: "R-02", name: "Ishita", x: 70, y: 20, status: "Delivering", task: "Order #1042", step: 1 },
-  { id: "R-03", name: "Kabir", x: 42, y: 66, status: "Available", task: "Waiting for order", step: 2 },
-  { id: "R-04", name: "Meera", x: 82, y: 72, status: "Delivering", task: "Order #1040", step: 3 },
-  { id: "R-05", name: "Dev", x: 28, y: 82, status: "Offline", task: "Not on shift", step: 4 }
+  { id: "R-01", name: "Aarav", lat: 23.3448, lng: 85.3090, status: "Available", task: "Waiting for order", step: 0 },
+  { id: "R-02", name: "Ishita", lat: 23.3470, lng: 85.3130, status: "Delivering", task: "Order #1042", step: 1 },
+  { id: "R-03", name: "Kabir", lat: 23.3415, lng: 85.3110, status: "Available", task: "Waiting for order", step: 2 },
+  { id: "R-04", name: "Meera", lat: 23.3425, lng: 85.3160, status: "Delivering", task: "Order #1040", step: 3 },
+  { id: "R-05", name: "Dev", lat: 23.3395, lng: 85.3075, status: "Offline", task: "Not on shift", step: 4 }
 ];
 
 const initialOrders = [
@@ -90,8 +91,8 @@ function Dashboard() {
         const angle = (Date.now() / 1100 + rider.step * 1.7);
         return {
           ...rider,
-          x: Math.min(88, Math.max(10, rider.x + Math.sin(angle) * 1.8)),
-          y: Math.min(88, Math.max(12, rider.y + Math.cos(angle * 0.8) * 1.5))
+          lat: rider.lat + Math.sin(angle) * 0.00012,
+          lng: rider.lng + Math.cos(angle * 0.8) * 0.00012
         };
       }));
     }, 1100);
@@ -151,16 +152,9 @@ function Dashboard() {
 
         <div className="main-grid">
           <section className="surface map-panel">
-            <div className="section-heading"><div><h2>Live rider map</h2><p className="muted">Illustrative local simulation · not real GPS</p></div><span className="map-tag">DEMO MAP</span></div>
-            <div className="map-canvas">
-              <div className="map-road road-a" /><div className="map-road road-b" /><div className="map-road road-c" /><div className="map-road road-d" />
-              <div className="map-block block-a" /><div className="map-block block-b" /><div className="map-block block-c" /><div className="map-block block-d" />
-              <div className="map-pin restaurant-pin" style={{ left: "50%", top: "43%" }}><b>R</b><span>Restaurant</span></div>
-              <div className="map-pin customer-pin" style={{ left: "76%", top: "48%" }}><b>C</b><span>Customer</span></div>
-              {riders.filter((r) => r.status !== "Offline").map((rider) => <div key={rider.id} className={`rider-marker ${rider.status === "Delivering" ? "busy" : ""}`} style={{ left: `${rider.x}%`, top: `${rider.y}%` }} title={`${rider.name} · ${rider.status}`}><span>{rider.name.slice(0, 1)}</span></div>)}
-              <div className="map-legend"><span><i className="legend-dot available-dot" />Available</span><span><i className="legend-dot busy-dot" />Delivering</span><span><i className="legend-dot restaurant-dot" />Restaurant</span></div>
-            </div>
-            <div className="simulation-bar"><div><strong>Simulation controls</strong><small>Start moving riders around the demo map.</small></div><div className="control-buttons"><button className="primary-button compact" onClick={() => setRunning((value) => !value)}>{running ? "Pause" : "Start simulation"}</button><button className="secondary-button compact" onClick={resetSimulation}>Reset</button></div></div>
+            <div className="section-heading"><div><h2>Live rider map</h2><p className="muted">Real Mapbox streets · simulated rider coordinates</p></div><span className="map-tag">DEMO MAP</span></div>
+            <MapboxMap riders={riders} />      </div>
+            <div className="simulation-bar"><div><strong>Simulation controls</strong><small>Move simulated riders across the live map.</small></div><div className="control-buttons"><button className="primary-button compact" onClick={() => setRunning((value) => !value)}>{running ? "Pause" : "Start simulation"}</button><button className="secondary-button compact" onClick={resetSimulation}>Reset</button></div></div>
           </section>
 
           <section className="surface allocation-panel">
@@ -176,7 +170,7 @@ function Dashboard() {
           <section className="surface table-panel"><div className="section-heading"><div><h2>Rider status</h2><p className="muted">Current rider availability</p></div></div><div className="table-wrap"><table><thead><tr><th>Rider</th><th>Status</th><th>Current task</th></tr></thead><tbody>{riders.map((rider) => <tr key={rider.id}><td><strong>{rider.name}</strong><small>{rider.id}</small></td><td><span className={`status-badge ${rider.status.toLowerCase()}`}>{rider.status}</span></td><td>{rider.task}</td></tr>)}</tbody></table></div></section>
           <section className="surface table-panel"><div className="section-heading"><div><h2>Recent orders</h2><p className="muted">Order allocation overview</p></div></div><div className="table-wrap"><table><thead><tr><th>Order</th><th>Restaurant</th><th>Status</th><th>Rider</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><strong>{order.id}</strong><small>{order.customer}</small></td><td>{order.restaurant}</td><td><span className={`status-badge ${order.status.toLowerCase().replaceAll(" ", "-")}`}>{order.status}</span></td><td>{order.rider}</td></tr>)}</tbody></table></div></section>
         </div>
-        <footer className="footer-note">RiderFlow demo · Simulated rider locations are for demonstration only.</footer>
+        <footer className="footer-note">RiderFlow demo · Rider coordinates are simulated, displayed on a real Mapbox map.</footer>
       </section>
     </main>
   );
