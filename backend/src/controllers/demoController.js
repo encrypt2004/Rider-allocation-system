@@ -283,8 +283,16 @@ export const updateDemoOrderStatus = async (req, res) => {
       });
     }
 
-    order.status = status;
-    await order.save();
+    // Compare-and-set the order status so duplicate/concurrent clicks
+    // cannot advance the same order twice.
+    const updatedOrder = await Order.findOneAndUpdate(
+      { _id: order._id, demoOwner: req.user._id, status: order.status },
+      { $set: { status } },
+      { new: true }
+    );
+    if (!updatedOrder) {
+      return res.status(409).json({ message: "This order was updated by another request. Refresh and try again." });
+    }
 
     if (order.rider) {
       const nextRiderStatus = status === "PICKED_UP" ? "PICKED_UP" : "IDLE";
