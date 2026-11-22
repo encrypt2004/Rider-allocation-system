@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import api from "./api.js";
 import MapboxMap from "./components/MapboxMap.jsx";
@@ -73,6 +74,7 @@ function Dashboard() {
   const [orders, setOrders] = useState(initialOrders);
   const [activity, setActivity] = useState(["Connecting to the allocation backend..."]);
   const [allocationDetails, setAllocationDetails] = useState(null);
+  const [lifecycleBusy, setLifecycleBusy] = useState("");
 
   useEffect(() => {
     api.get("/auth/me")
@@ -108,34 +110,43 @@ function Dashboard() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) return undefined;
+    const token = localStorage.getItem("token");
+    const socketUrl = (import.meta.env.VITE_API_URL || "http://localhost:5000/api").replace(/\\/api\\/?$/, "");
+    const socket = io(socketUrl, { auth: { token } });
+
+    socket.on("dashboard:update", (dashboard) => {
+      setRiders(dashboard.riders || []);
+      setOrders(dashboard.orders || []);
+    });
+
+    socket.on("connect_error", (error) => {
+      setActivity((items) => [`Live updates disconnected: ${error.message}`, ...items].slice(0, 5));
+    });
+
+    return () => socket.disconnect();
+  }, [user]);
+
+  useEffect(() => {
     if (!running) return undefined;
-    const timer = window.setInterval(() => {
-      setTick((value) => value + 1);
-      setRiders((current) => current.map((rider, index) => {
-        if (rider.status === "Offline") return rider;
-
-        // Backend riders do not need a "step" field; use their list position.
-        const step = Number.isFinite(rider.step) ? rider.step : index;
-        const angle = Date.now() / 1100 + step * 1.7;
-        const lat = Number(rider.lat);
-        const lng = Number(rider.lng);
-
-        // Never pass invalid coordinates to Mapbox.
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return rider;
-
-        return {
-          ...rider,
-          lat: lat + Math.sin(angle) * 0.00012,
-          lng: lng + Math.cos(angle * 0.8) * 0.00012
-        };
-      }));
+    const timer = window.setInterval(async () => {
+      try {
+        await api.post("/demo/simulation/tick");
+        setTick((value) => value + 1);
+      } catch (error) {
+        setRunning(false);
+        setActivity((items) => [
+          error.response?.data?.message || "Live simulation stopped because the backend could not update rider locations.",
+          ...items
+        ].slice(0, 5));
+      }
     }, 1100);
     return () => window.clearInterval(timer);
   }, [running]);
 
   const availableCount = riders.filter((r) => r.status === "Available").length;
-  const activeCount = riders.filter((r) => r.status === "Delivering").length;
-  const waitingCount = orders.filter((o) => o.status === "Waiting").length;
+  const activeCount = riders.filter((r) => ["Delivering", "Picked up"].includes(r.status)).length;
+  const waitingCount = orders.filter((o) => o.status === "PENDING").length;
   const logout = () => {
     localStorage.removeItem("token");
     navigate("/login");
@@ -158,6 +169,22 @@ function Dashboard() {
         error.response?.data?.message || "Could not allocate the next order.",
         ...items
       ].slice(0, 5));
+    }
+  };
+
+  const advanceOrder = async (order) => {
+    const nextStatus = order.status === "ASSIGNED" ? "PICKED_UP" : "DELIVERED";
+    const key = order.orderNumber;
+    setLifecycleBusy(key);
+    try {
+      const response = await api.patch(`/demo/orders/${key}/status`, { status: nextStatus });
+      setRiders(response.data.dashboard.riders);
+      setOrders(response.data.dashboard.orders);
+      setActivity((items) => [`Order #${key} moved to ${nextStatus.replace("_", " ")}.`, ...items].slice(0, 5));
+    } catch (error) {
+      setActivity((items) => [error.response?.data?.message || "Could not update this order.", ...items].slice(0, 5));
+    } finally {
+      setLifecycleBusy("");
     }
   };
 
@@ -218,17 +245,17 @@ function Dashboard() {
               <div className="candidate-results">
                 <div className="activity-heading">Allocation decision · Order #{allocationDetails.orderNumber}</div>
                 <p className="muted">H3 resolution {allocationDetails.h3.resolution} · rings searched {allocationDetails.h3.ringsChecked} · candidates {allocationDetails.h3.candidateCount}</p>
-                <div className="table-wrap"><table><thead><tr><th>Rider</th><th>Distance</th><th>ETA</th><th>Score</th></tr></thead><tbody>
+                <div className="table-wrap"><table><thead><tr><th>Rider</th><th>Distance</th><th>ETA</th><th>Score details</th><th>Total</th></tr></thead><tbody>
                   {allocationDetails.candidates.map((candidate) => (
                     <tr key={candidate.riderId}>
                       <td><strong>{candidate.riderName}</strong>{candidate.riderId === allocationDetails.selectedRider.riderId && <small>Selected</small>}</td>
                       <td>{candidate.distanceKm} km</td>
                       <td>{candidate.etaMinutes} min</td>
-                      <td>{candidate.score}</td>
+                      <td><small>Distance {candidate.scoreBreakdown.distance} · ETA {candidate.scoreBreakdown.eta}<br />Workload {candidate.scoreBreakdown.workload} · Rating {candidate.scoreBreakdown.rating}</small></td><td><strong>{candidate.score}</strong></td>
                     </tr>
                   ))}
                 </tbody></table></div>
-                <p className="muted">Lower score is better. Score weights: distance 40%, ETA 30%, workload 20%, rating 10%.</p>
+                <p className="muted">Lower score is better. Score = distance (40%) + ETA (30%) + workload (20%) + rating (10%). Each component is shown above; lower total wins.</p>
               </div>
             )}
             <ul className="activity-list">{activity.map((item, index) => <li key={index}><span />{item}</li>)}</ul>
@@ -237,7 +264,7 @@ function Dashboard() {
 
         <div className="bottom-grid">
           <section className="surface table-panel"><div className="section-heading"><div><h2>Rider status</h2><p className="muted">Current rider availability</p></div></div><div className="table-wrap"><table><thead><tr><th>Rider</th><th>Status</th><th>Current task</th></tr></thead><tbody>{riders.map((rider) => <tr key={rider.id}><td><strong>{rider.name}</strong><small>{rider.id}</small></td><td><span className={`status-badge ${rider.status.toLowerCase()}`}>{rider.status}</span></td><td>{rider.task}</td></tr>)}</tbody></table></div></section>
-          <section className="surface table-panel"><div className="section-heading"><div><h2>Recent orders</h2><p className="muted">Order allocation overview</p></div></div><div className="table-wrap"><table><thead><tr><th>Order</th><th>Restaurant</th><th>Status</th><th>Rider</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><strong>{order.id}</strong><small>{order.customer}</small></td><td>{order.restaurant}</td><td><span className={`status-badge ${order.status.toLowerCase().replaceAll(" ", "-")}`}>{order.status}</span></td><td>{order.rider}</td></tr>)}</tbody></table></div></section>
+          <section className="surface table-panel"><div className="section-heading"><div><h2>Recent orders</h2><p className="muted">Order allocation overview</p></div></div><div className="table-wrap"><table><thead><tr><th>Order</th><th>Restaurant</th><th>Status</th><th>Rider</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><strong>{order.id}</strong><small>{order.customer}</small></td><td>{order.restaurant}</td><td><span className={`status-badge ${order.status.toLowerCase().replaceAll("_", "-")}`}>{order.status.replaceAll("_", " ")}</span></td><td>{order.rider}{["ASSIGNED", "PICKED_UP"].includes(order.status) && <button className="secondary-button compact order-action" disabled={lifecycleBusy === order.orderNumber} onClick={() => advanceOrder(order)}>{lifecycleBusy === order.orderNumber ? "Saving..." : order.status === "ASSIGNED" ? "Mark picked up" : "Mark delivered"}</button>}</td></tr>)}</tbody></table></div></section>
         </div>
         <footer className="footer-note">RiderFlow demo · Rider coordinates are simulated, displayed on a real Mapbox map.</footer>
       </section>
