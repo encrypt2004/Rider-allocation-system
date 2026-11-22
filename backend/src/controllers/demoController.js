@@ -111,34 +111,46 @@ export const setupDemo = async (req, res) => {
   }
 };
 
+const buildDashboard = async (ownerId, userName) => {
+  const riders = await Rider.find({ demoOwner: ownerId }).populate("user", "name").sort({ code: 1 });
+  const orders = await Order.find({ demoOwner: ownerId })
+    .populate("restaurant", "name")
+    .populate({ path: "rider", populate: { path: "user", select: "name" } })
+    .sort({ createdAt: -1 });
+
+  return {
+    riders: riders.map((rider) => ({
+      id: rider.code,
+      name: rider.user?.name || "Rider",
+      lat: rider.location.lat,
+      lng: rider.location.lng,
+      status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : rider.status === "PICKED_UP" ? "Picked up" : "Delivering",
+      task: rider.status === "IDLE" ? "Waiting for order" : rider.status === "OFFLINE" ? "Not on shift" : "Assigned delivery",
+      rating: rider.rating,
+      recentDeliveries: rider.recentDeliveries
+    })),
+    orders: orders.map((order) => ({
+      id: `#${order.orderNumber}`,
+      orderNumber: order.orderNumber,
+      orderId: order._id,
+      customer: userName,
+      restaurant: order.restaurant?.name || "Restaurant",
+      status: order.status,
+      rider: order.rider?.user?.name || "—"
+    }))
+  };
+};
+
+const emitDashboard = async (req) => {
+  const dashboard = await buildDashboard(req.user._id, req.user.name);
+  req.app.get("io")?.to(`user:${req.user._id}`).emit("dashboard:update", dashboard);
+  return dashboard;
+};
+
 export const getDemoDashboard = async (req, res) => {
   try {
-    const ownerId = req.user._id;
-    const riders = await Rider.find({ demoOwner: ownerId }).populate("user", "name").sort({ code: 1 });
-    const orders = await Order.find({ demoOwner: ownerId })
-      .populate("restaurant", "name")
-      .populate({ path: "rider", populate: { path: "user", select: "name" } })
-      .sort({ createdAt: -1 });
-
-    return res.json({
-      riders: riders.map((rider) => ({
-        id: rider.code,
-        name: rider.user.name,
-        lat: rider.location.lat,
-        lng: rider.location.lng,
-        status: rider.status === "IDLE" ? "Available" : rider.status === "OFFLINE" ? "Offline" : "Delivering",
-        task: rider.status === "IDLE" ? "Waiting for order" : rider.status === "OFFLINE" ? "Not on shift" : "Assigned delivery",
-        rating: rider.rating,
-        recentDeliveries: rider.recentDeliveries
-      })),
-      orders: orders.map((order) => ({
-        id: `#${order.orderNumber}`,
-        customer: req.user.name,
-        restaurant: order.restaurant?.name || "Restaurant",
-        status: order.status === "PENDING" ? "Waiting" : order.status === "DELIVERED" ? "Delivered" : "On the way",
-        rider: order.rider?.user?.name || "—"
-      }))
-    });
+    const dashboard = await buildDashboard(req.user._id, req.user.name);
+    return res.json(dashboard);
   } catch (error) {
     return res.status(500).json({ message: "Could not load dashboard", error: error.message });
   }
@@ -148,7 +160,8 @@ export const allocateDemoOrder = async (req, res) => {
   try {
     const result = await allocateNextOrder(req.user._id);
     if (result.error) return res.status(400).json({ message: result.error });
-    return res.json({ message: "Rider allocated successfully", allocation: result });
+    const dashboard = await emitDashboard(req);
+    return res.json({ message: "Rider allocated successfully", allocation: result, dashboard });
   } catch (error) {
     return res.status(500).json({ message: "Allocation failed", error: error.message });
   }
@@ -185,8 +198,71 @@ export const resetDemo = async (req, res) => {
       );
     }
 
-    return res.json({ message: "Demo data has been reset." });
+    const dashboard = await emitDashboard(req);
+    return res.json({ message: "Demo data has been reset.", dashboard });
   } catch (error) {
     return res.status(500).json({ message: "Could not reset demo data", error: error.message });
+  }
+};
+
+ 
+// Move rider coordinates on the backend, then broadcast the new dashboard.
+export const moveDemoRiders = async (req, res) => {
+  try {
+    const ownerId = req.user._id;
+    const riders = await Rider.find({ demoOwner: ownerId, status: { $ne: "OFFLINE" } });
+    const now = Date.now();
+
+    for (const [index, rider] of riders.entries()) {
+      const angle = now / 1100 + index * 1.7;
+      const baseLat = rider.location.lat;
+      const baseLng = rider.location.lng;
+      rider.location.lat = baseLat + Math.sin(angle) * 0.000025;
+      rider.location.lng = baseLng + Math.cos(angle * 0.8) * 0.000025;
+      await rider.save();
+    }
+
+    const dashboard = await emitDashboard(req);
+    return res.json({ message: "Rider locations updated", dashboard });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not move riders", error: error.message });
+  }
+};
+
+// Keep order and rider states in sync through a small, explicit lifecycle.
+export const updateDemoOrderStatus = async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+    const { status } = req.body;
+    const allowedNext = {
+      ASSIGNED: "PICKED_UP",
+      PICKED_UP: "DELIVERED"
+    };
+
+    const order = await Order.findOne({ demoOwner: req.user._id, orderNumber });
+    if (!order) return res.status(404).json({ message: "Order not found." });
+    if (allowedNext[order.status] !== status) {
+      return res.status(400).json({
+        message: order.status === "DELIVERED"
+          ? "This order is already delivered."
+          : "Invalid status change. Orders must move from Assigned to Picked Up, then Delivered."
+      });
+    }
+
+    order.status = status;
+    await order.save();
+
+    if (order.rider) {
+      const nextRiderStatus = status === "PICKED_UP" ? "PICKED_UP" : "IDLE";
+      await Rider.findByIdAndUpdate(order.rider, {
+        $set: { status: nextRiderStatus },
+        ...(status === "DELIVERED" ? { $inc: { recentDeliveries: 1 } } : {})
+      });
+    }
+
+    const dashboard = await emitDashboard(req);
+    return res.json({ message: `Order moved to ${status}`, dashboard });
+  } catch (error) {
+    return res.status(500).json({ message: "Could not update order status", error: error.message });
   }
 };
