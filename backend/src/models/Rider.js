@@ -8,6 +8,8 @@ const riderSchema = new mongoose.Schema(
       required: true,
       unique: true
     },
+    demoOwner: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+    code: String,
     phone: String,
     rating: {
       type: Number,
