@@ -80,7 +80,8 @@ export default function MapboxMap({ riders }) {
         markers.current.set(rider.id, marker);
       } else {
         marker.setLngLat([lng, lat]);
-        marker.getElement().className = "map-rider-marker " + (rider.status === "Delivering" ? "busy" : "available");
+        marker.getElement().className = "map-rider-marker " + (["Delivering", "Picked up"].includes(rider.status) ? "busy" : "available");
+        marker.getPopup()?.setText(rider.name + " · " + rider.status);
       }
     });
   }, [riders, mapLoaded]);
