@@ -88,7 +88,13 @@ export const allocateNextOrder = async (ownerId) => {
     if (nearby.length > 0) break;
   }
 
-  if (nearby.length === 0) nearby = ridersWithCells;
+  if (nearby.length === 0) {
+    return {
+      error: "No available riders were found within 5 H3 rings of this restaurant. Try again after a rider moves closer.",
+      reason: "NO_NEARBY_RIDERS",
+      h3: { resolution, ringsChecked, candidateCount: 0 }
+    };
+  }
 
   const candidates = nearby
     .map(({ rider }) => {
@@ -131,6 +137,7 @@ export const allocateNextOrder = async (ownerId) => {
     selectedRider: winner,
     candidates,
     h3: { resolution, ringsChecked, candidateCount: candidates.length },
+    scoreWeights: { distance: 40, eta: 30, workload: 20, rating: 10 },
     orderStatus: orderUpdate.status
   };
 };
