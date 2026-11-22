@@ -67,13 +67,27 @@ export const getNextOrderNumber = async (ownerId) => {
     return Number.isSafeInteger(parsed) && parsed > max ? parsed : max;
   }, 0);
 
+  // Keep $max and $inc in separate atomic updates. MongoDB does not allow
+  // two update operators to modify the same field in one update document.
+  try {
+    await DemoCounter.updateOne(
+      { demoOwner: ownerId },
+      { $max: { value: currentMaximum } },
+      { upsert: true }
+    );
+  } catch (error) {
+    // Two first-time requests may race to create the same counter document.
+    if (error.code !== 11000) throw error;
+    await DemoCounter.updateOne(
+      { demoOwner: ownerId },
+      { $max: { value: currentMaximum } }
+    );
+  }
+
   const counter = await DemoCounter.findOneAndUpdate(
     { demoOwner: ownerId },
-    {
-      $max: { value: currentMaximum },
-      $inc: { value: 1 }
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { $inc: { value: 1 } },
+    { new: true }
   );
 
   return String(counter.value);
