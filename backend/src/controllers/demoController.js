@@ -171,14 +171,17 @@ export const resetDemo = async (req, res) => {
   try {
     const ownerId = req.user._id;
     const riderDefaults = [
-      ["R-01", "IDLE"], ["R-02", "ACCEPTED"], ["R-03", "IDLE"],
-      ["R-04", "ACCEPTED"], ["R-05", "OFFLINE"]
+      ["R-01", "IDLE", 23.3448, 85.3090],
+      ["R-02", "ACCEPTED", 23.3470, 85.3130],
+      ["R-03", "IDLE", 23.3415, 85.3110],
+      ["R-04", "ACCEPTED", 23.3425, 85.3160],
+      ["R-05", "OFFLINE", 23.3395, 85.3075]
     ];
 
-    for (const [code, status] of riderDefaults) {
+    for (const [code, status, lat, lng] of riderDefaults) {
       await Rider.findOneAndUpdate(
         { demoOwner: ownerId, code },
-        { $set: { status } }
+        { $set: { status, location: { lat, lng } } }
       );
     }
 
@@ -214,11 +217,11 @@ export const moveDemoRiders = async (req, res) => {
     const now = Date.now();
 
     for (const [index, rider] of riders.entries()) {
+      const home = demoRiders.find((item) => item.code === rider.code);
+      if (!home) continue;
       const angle = now / 1100 + index * 1.7;
-      const baseLat = rider.location.lat;
-      const baseLng = rider.location.lng;
-      rider.location.lat = baseLat + Math.sin(angle) * 0.000025;
-      rider.location.lng = baseLng + Math.cos(angle * 0.8) * 0.000025;
+      rider.location.lat = home.lat + Math.sin(angle) * 0.0005;
+      rider.location.lng = home.lng + Math.cos(angle * 0.8) * 0.0005;
       await rider.save();
     }
 
